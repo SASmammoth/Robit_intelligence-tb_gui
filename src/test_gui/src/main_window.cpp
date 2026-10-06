@@ -222,9 +222,46 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
           { qnode->loadParams(paramFile()); });
   connect(qnode, &QNode::paramFileStatus, ui->labelParamFile, &QLabel::setText);
 
-
   // ======== 검출된 cv 객체 표시창 + reset버튼
-  connect(ui->signsResetButton, &QPushButton::clicked, this, [this])
+  connect(qnode, &QNode::signStateChanged, this, [this](const QString &label, int state, const QString &lastTime)
+          {
+    QLabel *w = nullptr;
+    QString name;
+    if (label == "parking")
+    {
+      w = ui->signs_ParkingLabel;
+      name = "주차";
+    }
+    else if (label == "left")
+    {
+      w = ui->signs_LeftLabel;
+      name = "좌회전";
+    }
+    else if (label == "right")
+    {
+      w = ui->signs_RightLabel;
+      name = "우회전";
+    }
+    else if (label == "construction")
+    {
+      w = ui->signs_ConstructionLabel;
+      name = "공사장";
+    }
+    else if (label == "barrier")
+    {
+      w = ui->signs_BarrierStatusLabel;
+      name = "차단바";
+    }
+    if (!w || state < 0 || state > 2)
+      return;
+
+    static const char *mark[] = {"X", "O", "△"};
+    static const char *color[] = {"gray", "limegreen", "orange"};
+    w->setText(QString("%1 : %2  (%3)").arg(name, mark[state], lastTime));
+    w->setStyleSheet(QString("color: %1; font-weight: bold;").arg(color[state])); });
+
+  connect(ui->signsResetButton, &QPushButton::clicked, this, [this]
+          { qnode->detectionsReset(); });
 }
 
 void MainWindow::showImage(QLabel *label, const QImage &img)

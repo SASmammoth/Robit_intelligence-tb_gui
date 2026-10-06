@@ -8,6 +8,7 @@
 #include <chrono>
 #include <fstream>
 #include <sstream>
+#include <QDateTime>
 
 // 압축 이미지 → QImage (실패 시 null)
 static QImage toQImage(const sensor_msgs::msg::CompressedImage &msg)
@@ -111,6 +112,8 @@ QNode::QNode()
               Q_EMIT paramLoaded(QString::fromStdString(p.name), static_cast<int>(p.value.integer_value));
       });
 
+  judge_timer_ = node->create_wall_timer(std::chrono::milliseconds(100), [this]
+                                         { judgeSigns(); });
   this->start();
 }
 
@@ -337,10 +340,50 @@ void QNode::publishParking(bool on)
 void QNode::onDetections(const tb_interfaces::msg::DetectionArray &msg)
 {
   QString text;
+  std::lock_guard<std::mutex> lk(seen_mtx_);
   for (const auto &d : msg.detections)
   {
     text += QString("%1  %2\n").arg(QString::fromStdString(d.label)).arg(d.score, 0, 'f', 2);
     last_seen_[QString::fromStdString(d.label)] = node->now();
   }
   Q_EMIT detectionsReceived(text.isEmpty() ? QString("(없음)") : text.trimmed());
+}
+
+void QNode::detectionsReset()
+{
+  std::lock_guard<std::mutex> lk(seen_mtx_);
+  last_seen_.clear();
+  sign_state_.clear(); // 다음 판정 때 전부 X로 다시 전송됨
+  sign_time_.clear();
+}
+
+void QNode::judgeSigns()
+{
+  static const QStringList labels = {"parking", "left", "right", "construction", "barrier"};
+  constexpr double HOLD_SEC = 2.0;
+
+  const rclcpp::Time now = node->now();
+  std::lock_guard<std::mutex> lk(seen_mtx_);
+  for (const auto &l : labels)
+  {
+    int st = 0;
+    QString t = "-";
+    auto it = last_seen_.find(l);
+    if (it != last_seen_.end())
+    {
+      const double ago = (now - it.value()).seconds();
+      st = (ago < HOLD_SEC) ? 1 : 2;
+      t = QString("%1, %2초 전")
+              .arg(QDateTime::fromMSecsSinceEpoch(it.value().nanoseconds() / 1'000'000)
+                       .toString("hh:mm:ss"))
+              .arg(ago, 0, 'f', 1);
+    }
+
+    if (sign_state_.value(l, -1) != st || sign_time_.value(l) != t)
+    {
+      sign_state_[l] = st;
+      sign_time_[l] = t;
+      Q_EMIT signStateChanged(l, st, t);
+    }
+  }
 }

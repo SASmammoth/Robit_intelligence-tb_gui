@@ -21,6 +21,7 @@
 #include <QMap>
 #include <QString>
 #include <atomic>
+#include <mutex>
 
 class QNode : public QThread
 {
@@ -31,13 +32,16 @@ public:
 
   // ====== 파라미터 (이름으로 /lineDetect_node, /path_node 중 보낼 곳을 고름)
   void setParams(const QMap<QString, int> &params);
-  bool requestParams();                       // 두 노드 모두 요청했으면 true
-  void saveParams(const QString &path);       // 두 노드의 현재 값 → YAML
-  void loadParams(const QString &path);       // YAML → 두 노드에 설정
+  bool requestParams();                 // 두 노드 모두 요청했으면 true
+  void saveParams(const QString &path); // 두 노드의 현재 값 → YAML
+  void loadParams(const QString &path); // YAML → 두 노드에 설정
 
   // ====== 미션
-  void publishTurn(int turn);                 // 0 직진, 1 좌, 2 우
+  void publishTurn(int turn); // 0 직진, 1 좌, 2 우
   void publishParking(bool on);
+
+  // ====== 객체 감지 리셋버튼 콜백
+  void detectionsReset();
 
 protected:
   void run();
@@ -73,6 +77,11 @@ private:
   // signs 감지 콜백
   void onDetections(const tb_interfaces::msg::DetectionArray &msg);
   QMap<QString, rclcpp::Time> last_seen_;
+  QMap<QString, int> sign_state_; // 마지막으로 보낸 상태
+  QMap<QString, QString> sign_time_; // 마지막으로 보낸 시각 문자열
+  std::mutex seen_mtx_;           // ROS 스레드 ↔ GUI(리셋) 보호
+  rclcpp::TimerBase::SharedPtr judge_timer_;
+  void judgeSigns();
 
 Q_SIGNALS:
   void rosShutDown();
@@ -94,6 +103,8 @@ Q_SIGNALS:
   void paramLoaded(const QString &name, int value);
   void paramFileStatus(const QString &text);
 
+  // 객체탐지
+  void signStateChanged(const QString &label, int state, const QString &lastTime);
 };
 
 #endif /* test_gui_QNODE_HPP_ */
