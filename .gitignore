@@ -1,0 +1,42 @@
+# ── colcon 빌드 산출물 ──
+build/
+install/
+log/
+
+# ── IntelliSense용 생성 파일 ──
+compile_commands.json
+
+# ── 에디터 ──
+.vscode/*
+!.vscode/settings.json
+!.vscode/c_cpp_properties.json
+!.vscode/tasks.json
+.idea/
+*.swp
+*~
+
+# ── C/C++ ──
+*.o
+*.so
+*.a
+
+# ── Python ──
+__pycache__/
+*.pyc
+*.egg-info/
+
+# ── Qt ──
+*.ui.autosave
+CMakeLists.txt.user*
+*.qmlc
+
+# ── 데이터 / 결과물 ──
+*.bag
+rosbag2_*/
+*.db3
+*.mcap
+
+# ── 모델 가중치 (용량 큼, 필요하면 Git LFS로) ──
+*.pt
+*.onnx
+*.engine

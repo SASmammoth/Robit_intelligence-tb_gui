@@ -1,0 +1,17 @@
+{
+    "configurations": [
+        {
+            "name": "ros2_env",
+            "compileCommands": "${workspaceFolder}/build/compile_commands.json",
+            "compilerPath": "/home/SASmammoth/miniforge3/envs/ros2_env/bin/g++",
+            "cStandard": "c17",
+            "cppStandard": "c++17",
+            "intelliSenseMode": "linux-gcc-x64",
+            "includePath": [
+                "${workspaceFolder}/src/**",
+                "/home/SASmammoth/miniforge3/envs/ros2_env/include/**"
+            ]
+        }
+    ],
+    "version": 4
+}

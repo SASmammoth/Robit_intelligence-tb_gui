@@ -1,0 +1,17 @@
+{
+    "cmake.configureOnOpen": false,
+    "cmake.automaticReconfigure": false,
+    "C_Cpp.default.configurationProvider": "",
+    "python.defaultInterpreterPath": "/home/SASmammoth/miniforge3/envs/ros2_env/bin/python",
+    "files.exclude": {
+        "build": true,
+        "install": true,
+        "log": true
+    },
+    "files.associations": {
+        "*.ui": "xml",
+        "*.qrc": "xml",
+        "*.launch.py": "python"
+    },
+    "cmake.sourceDirectory": "/home/SASmammoth/ros2_ws/src/test_gui"
+}
