@@ -6,6 +6,9 @@
 #include "../include/test_gui/main_window.hpp"
 
 #include <QDir>
+#include <QApplication>
+#include <algorithm>
+#include <cstdlib>
 
 MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWindowDesign)
 {
@@ -262,6 +265,162 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
 
   connect(ui->signsResetButton, &QPushButton::clicked, this, [this]
           { qnode->detectionsReset(); });
+
+  // ====== 주행 (WASD) + UART
+  // 슬라이더/스핀박스에 포커스가 있어도 키를 받도록 앱 전체에 필터 설치
+  qApp->installEventFilter(this);
+
+  connect(ui->checkDriveEnable, &QCheckBox::toggled, this, [this](bool on)
+          {
+    if (!on)
+      stopDrive();
+    else
+      setFocus(); });
+
+  // 한계치/회전 비율을 바꾸면 누르고 있는 키 기준으로 바로 다시 계산
+  connect(ui->spinMaxSpeed, qOverload<int>(&QSpinBox::valueChanged), this, [this](int)
+          { updateDrive(); });
+  connect(ui->spinTurnRatio, qOverload<int>(&QSpinBox::valueChanged), this, [this](int)
+          { updateDrive(); });
+
+  connect(ui->btnUartStart, &QPushButton::clicked, this, [this]
+          { qnode->sendUart("start"); });
+  connect(ui->btnUartQuit, &QPushButton::clicked, this, [this]
+          {
+    stopDrive(true);
+    qnode->sendUart("quit"); });
+  connect(ui->btnDriveStop, &QPushButton::clicked, this, [this]
+          { stopDrive(true); });
+
+  // 창이 포커스를 잃으면 KeyRelease를 못 받으므로 정지
+  connect(qApp, &QGuiApplication::applicationStateChanged, this, [this](Qt::ApplicationState s)
+          {
+    if (s != Qt::ApplicationActive)
+      stopDrive(); });
+
+  connect(qnode, &QNode::uartReceived, this, &MainWindow::showUart);
+}
+
+// ───────── 주행 (WASD) ─────────
+
+bool MainWindow::eventFilter(QObject *obj, QEvent *ev)
+{
+  const bool press = ev->type() == QEvent::KeyPress;
+  if ((press || ev->type() == QEvent::KeyRelease) && ui->checkDriveEnable->isChecked())
+  {
+    auto *ke = static_cast<QKeyEvent *>(ev);
+    const int k = ke->key();
+    if (k == Qt::Key_W || k == Qt::Key_A || k == Qt::Key_S || k == Qt::Key_D || k == Qt::Key_Space)
+    {
+      if (!ke->isAutoRepeat()) // 키를 누르고 있을 때의 반복 이벤트는 무시
+      {
+        if (k == Qt::Key_Space)
+        {
+          if (press)
+            stopDrive(true);
+        }
+        else
+        {
+          if (press)
+            drive_keys_.insert(k);
+          else
+            drive_keys_.remove(k);
+          updateDrive();
+        }
+      }
+      return true; // 다른 위젯(체크박스, 슬라이더 등)으로 넘기지 않음
+    }
+  }
+  return QMainWindow::eventFilter(obj, ev);
+}
+
+// W/S: 전진/후진, A/D: 좌/우 회전 (같이 누르면 곡선 주행)
+// L = v + t, R = v - t  →  둘 중 큰 값이 한계치를 넘으면 비율 유지한 채 축소
+void MainWindow::updateDrive()
+{
+  if (!ui->checkDriveEnable->isChecked())
+    return;
+
+  const int fwd = int(drive_keys_.contains(Qt::Key_W)) - int(drive_keys_.contains(Qt::Key_S));
+  const int turn = int(drive_keys_.contains(Qt::Key_D)) - int(drive_keys_.contains(Qt::Key_A));
+  const int vmax = ui->spinMaxSpeed->value();
+
+  const int v = fwd * vmax;
+  const int t = turn * vmax * ui->spinTurnRatio->value() / 100;
+  int l = v + t;
+  int r = v - t;
+
+  const int peak = std::max(std::abs(l), std::abs(r));
+  if (peak > vmax && peak > 0)
+  {
+    l = l * vmax / peak;
+    r = r * vmax / peak;
+  }
+  sendDrive(l, r);
+}
+
+void MainWindow::sendDrive(int l, int r, bool force)
+{
+  if (!force && l == drive_l_ && r == drive_r_)
+    return;
+  drive_l_ = l;
+  drive_r_ = r;
+  qnode->publishVelocity(l, r);
+  ui->labelDriveCmd->setText(QString("cmd  L: %1   R: %2").arg(l).arg(r));
+}
+
+void MainWindow::stopDrive(bool force)
+{
+  drive_keys_.clear();
+  sendDrive(0, 0, force);
+}
+
+// tb_uart_node가 보내는 문자열 (velocity / psd / stm32 / error)
+void MainWindow::showUart(const QString &text)
+{
+  const QStringList t = text.split(' ', Qt::SkipEmptyParts);
+  if (t.isEmpty())
+    return;
+
+  if (t[0] == "velocity")
+  {
+    if (t.size() == 3 && (t[1] == "L" || t[1] == "R"))
+      (t[1] == "L" ? ui->moterL_speedLabel : ui->moterR_speedLabel)->setText(t[1] + " : " + t[2]);
+    else if (t.size() == 3)
+    {
+      ui->moterL_speedLabel->setText("L : " + t[1]);
+      ui->moterR_speedLabel->setText("R : " + t[2]);
+    }
+  }
+  else if (t[0] == "psd")
+  {
+    if (t.size() == 4)
+    {
+      ui->frontPSDLabel->setText("정면 : " + t[1]);
+      ui->leftPSDLabel_3->setText("좌측 : " + t[2]);
+      ui->rightPSDLabel_2->setText("우측 : " + t[3]);
+    }
+    else if (t.size() == 3)
+    {
+      if (t[1] == "F")
+        ui->frontPSDLabel->setText("정면 : " + t[2]);
+      else if (t[1] == "L")
+        ui->leftPSDLabel_3->setText("좌측 : " + t[2]);
+      else if (t[1] == "R")
+        ui->rightPSDLabel_2->setText("우측 : " + t[2]);
+    }
+  }
+  else if (t[0] == "stm32" && t.size() >= 2 && (t[1] == "start" || t[1] == "quit"))
+  {
+    const bool on = t[1] == "start";
+    ui->labelUartState->setText(on ? "STM32: running" : "STM32: stopped");
+    ui->labelUartState->setStyleSheet(on ? "color: limegreen; font-weight: bold;" : "color: gray; font-weight: bold;");
+  }
+  else if (t[0] == "error")
+  {
+    ui->labelUartLog->setText(text);
+    ui->labelUartLog->setStyleSheet("color: #c0392b;");
+  }
 }
 
 void MainWindow::showImage(QLabel *label, const QImage &img)
@@ -336,6 +495,7 @@ QString MainWindow::paramFile() const
 
 void MainWindow::closeEvent(QCloseEvent *event)
 {
+  stopDrive(); // 주행 중에 창을 닫으면 정지 명령 전송
   QMainWindow::closeEvent(event);
 }
 

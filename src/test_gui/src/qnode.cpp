@@ -95,6 +95,12 @@ QNode::QNode()
   turn_pub_ = node->create_publisher<std_msgs::msg::UInt8>("/mission/turn", 10);
   parking_pub_ = node->create_publisher<std_msgs::msg::Bool>("/mission/parking", 10);
 
+  // ====== UART (tb_uart_node)
+  uart_pub_ = node->create_publisher<std_msgs::msg::String>("TB_Uart_RX", 10);
+  uart_sub_ = node->create_subscription<std_msgs::msg::String>(
+      "TB_Uart_TX", 10, [this](const std_msgs::msg::String::ConstSharedPtr m)
+      { Q_EMIT uartReceived(QString::fromStdString(m->data)); });
+
   // ====== 파라미터 클라이언트 (노드별)
   line_client_ = std::make_shared<rclcpp::AsyncParametersClient>(node, LINE_NODE);
   path_client_ = std::make_shared<rclcpp::AsyncParametersClient>(node, PATH_NODE);
@@ -333,6 +339,20 @@ void QNode::publishParking(bool on)
   std_msgs::msg::Bool m;
   m.data = on;
   parking_pub_->publish(m);
+}
+
+// ───────── UART ─────────
+
+void QNode::sendUart(const QString &cmd)
+{
+  std_msgs::msg::String m;
+  m.data = cmd.toStdString();
+  uart_pub_->publish(m);
+}
+
+void QNode::publishVelocity(int l, int r)
+{
+  sendUart(QString("velocity %1 %2").arg(l).arg(r));
 }
 
 // ------------------ 객체감지--------------------

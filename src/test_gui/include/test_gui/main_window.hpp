@@ -18,6 +18,8 @@
 #include <QPushButton>
 #include <QSignalBlocker>
 #include <QIcon>
+#include <QSet>
+#include <QKeyEvent>
 #include "qnode.hpp"
 #include "ui_mainwindow.h"
 
@@ -30,12 +32,15 @@ public:
   ~MainWindow();
   QNode *qnode;
 
+protected:
+  bool eventFilter(QObject *obj, QEvent *ev) override; // WASD 키 가로채기
+
 private:
   Ui::MainWindowDesign *ui;
   void closeEvent(QCloseEvent *event);
 
   void showImage(QLabel *label, const QImage &img);
-  void queueParam(const QString &name, int v);   // 50ms 묶음 전송
+  void queueParam(const QString &name, int v); // 50ms 묶음 전송
 
   // HSV (대상별)
   struct HsvWidget
@@ -63,9 +68,17 @@ private:
   void showMission();
   int turn_ = 0;
   bool parking_ = false;
-  QTimer status_timeout_;                         // 경로 출처가 1초 넘게 안 오면 회색
+  QTimer status_timeout_; // 경로 출처가 1초 넘게 안 오면 회색
 
-  QString paramFile() const;                      // 저장 파일 경로
+  QString paramFile() const; // 저장 파일 경로
+
+  // 주행 (WASD)
+  void updateDrive();                               // 눌린 키 → 좌우 속도 계산
+  void sendDrive(int l, int r, bool force = false); // 값이 바뀔 때만 전송
+  void stopDrive(bool force = false);               // 키 상태 초기화 + 0 0
+  void showUart(const QString &text);               // TB_Uart_TX 표시
+  QSet<int> drive_keys_;
+  int drive_l_ = 0, drive_r_ = 0; // 마지막으로 보낸 값
 
   // 공통
   QMap<QString, int> pending_;

@@ -40,6 +40,10 @@ public:
   void publishTurn(int turn); // 0 직진, 1 좌, 2 우
   void publishParking(bool on);
 
+  // ====== UART (tb_uart_node: TB_Uart_RX로 명령 문자열 전송)
+  void sendUart(const QString &cmd);  // "start", "quit" 등
+  void publishVelocity(int l, int r); // "velocity <L> <R>"
+
   // ====== 객체 감지 리셋버튼 콜백
   void detectionsReset();
 
@@ -68,6 +72,10 @@ private:
   rclcpp::Publisher<std_msgs::msg::UInt8>::SharedPtr turn_pub_;
   rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr parking_pub_;
 
+  // UART
+  rclcpp::Publisher<std_msgs::msg::String>::SharedPtr uart_pub_;
+  rclcpp::Subscription<std_msgs::msg::String>::SharedPtr uart_sub_;
+
   // 파라미터
   rclcpp::AsyncParametersClient::SharedPtr line_client_, path_client_;
   bool line_requested_ = false, path_requested_ = false;
@@ -77,9 +85,9 @@ private:
   // signs 감지 콜백
   void onDetections(const tb_interfaces::msg::DetectionArray &msg);
   QMap<QString, rclcpp::Time> last_seen_;
-  QMap<QString, int> sign_state_; // 마지막으로 보낸 상태
+  QMap<QString, int> sign_state_;    // 마지막으로 보낸 상태
   QMap<QString, QString> sign_time_; // 마지막으로 보낸 시각 문자열
-  std::mutex seen_mtx_;           // ROS 스레드 ↔ GUI(리셋) 보호
+  std::mutex seen_mtx_;              // ROS 스레드 ↔ GUI(리셋) 보호
   rclcpp::TimerBase::SharedPtr judge_timer_;
   void judgeSigns();
 
@@ -102,6 +110,9 @@ Q_SIGNALS:
   // 파라미터
   void paramLoaded(const QString &name, int value);
   void paramFileStatus(const QString &text);
+
+  // UART (TB_Uart_TX 수신 문자열)
+  void uartReceived(const QString &text);
 
   // 객체탐지
   void signStateChanged(const QString &label, int state, const QString &lastTime);
